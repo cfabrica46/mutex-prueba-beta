@@ -17,6 +17,8 @@ func main() {
 
 	var wOfMethod, wOfOpen sync.WaitGroup
 
+	var mOfOpen sync.Mutex
+
 	fmt.Println("inicio")
 
 	now := time.Now()
@@ -31,10 +33,6 @@ func main() {
 
 	for _, infoArchivo := range origen {
 
-		direccion := filepath.Join("origen", infoArchivo.Name())
-
-		fmt.Println("abro archivo: ", direccion)
-
 		wOfOpen.Add(1)
 
 		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen)
@@ -46,7 +44,12 @@ func main() {
 	for _, infoArchivo := range origen {
 
 		wOfMethod.Add(1)
+
+		mOfOpen.Lock()
+
 		archivoOrigen := <-canalArchivo
+
+		mOfOpen.Unlock()
 
 		direccion := filepath.Join("origen", infoArchivo.Name())
 
