@@ -31,27 +31,19 @@ func main() {
 
 	canalArchivo := make(chan *os.File, len(origen))
 
+	canalError := make(chan bool, len(origen))
+
 	for i, infoArchivo := range origen {
 
 		wOfOpen.Add(1)
 
-		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen, i)
-
-	}
-
-	canalError := make(chan bool, len(origen))
-
-	wOfOpen.Wait()
-
-	for _, infoArchivo := range origen {
+		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen, i, &mOfOpen)
 
 		wOfMethod.Add(1)
 
-		mOfOpen.Lock()
-
 		archivoOrigen := <-canalArchivo
-
 		mOfOpen.Unlock()
+		wOfOpen.Wait()
 
 		direccion := filepath.Join("origen", infoArchivo.Name())
 
@@ -65,7 +57,7 @@ func main() {
 	fmt.Println("fin")
 }
 
-func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup, i int) {
+func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup, i int, m *sync.Mutex) {
 
 	//En la función abir pongo la condicion para que halla un archivo el cual no tenga
 	//El permiso de leer y me arroje un error.
@@ -80,8 +72,11 @@ func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.Fi
 
 		if err != nil {
 			log.Println(err)
+			m.Lock()
+			canalArchivo <- archivo
 			return
 		}
+		m.Lock()
 		canalArchivo <- archivo
 
 	} else {
@@ -94,8 +89,11 @@ func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.Fi
 
 		if err != nil {
 			log.Println(err)
+			m.Lock()
+			canalArchivo <- archivo
 			return
 		}
+		m.Lock()
 		canalArchivo <- archivo
 	}
 }
