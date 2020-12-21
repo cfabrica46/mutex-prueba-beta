@@ -31,13 +31,15 @@ func main() {
 
 	canalArchivo := make(chan *os.File, len(origen))
 
-	for _, infoArchivo := range origen {
+	for i, infoArchivo := range origen {
 
 		wOfOpen.Add(1)
 
-		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen)
+		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen, i)
 
 	}
+
+	canalError := make(chan bool, len(origen))
 
 	wOfOpen.Wait()
 
@@ -53,7 +55,7 @@ func main() {
 
 		direccion := filepath.Join("origen", infoArchivo.Name())
 
-		go leer(archivoOrigen, direccion, &wOfMethod)
+		go leer(archivoOrigen, direccion, &wOfMethod, &mOfOpen, canalError)
 
 	}
 
@@ -63,26 +65,45 @@ func main() {
 	fmt.Println("fin")
 }
 
-func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup) {
+func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup, i int) {
 
-	defer w.Done()
+	if i == 0 {
+		defer w.Done()
 
-	direccion := filepath.Join(carpeta, nameFile)
+		direccion := filepath.Join(carpeta, nameFile)
 
-	fmt.Println("abro archivo: ", direccion)
-	archivo, err := os.OpenFile(direccion, flag, 0)
+		fmt.Println("abro archivo: ", direccion)
+		archivo, err := os.OpenFile(direccion, os.O_WRONLY, 0)
 
-	if err != nil {
-		log.Println(err)
-		return
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		canalArchivo <- archivo
+
+	} else {
+		defer w.Done()
+
+		direccion := filepath.Join(carpeta, nameFile)
+
+		fmt.Println("abro archivo: ", direccion)
+		archivo, err := os.OpenFile(direccion, flag, 0)
+
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		canalArchivo <- archivo
 	}
-	canalArchivo <- archivo
-
 }
 
-func leer(archivo *os.File, direccion string, w *sync.WaitGroup) {
+func leer(archivo *os.File, direccion string, w *sync.WaitGroup, m *sync.Mutex, canalError chan bool) {
 
 	defer w.Done()
+
+	if archivo == nil {
+		return
+	}
 
 	defer archivo.Close()
 
@@ -97,8 +118,20 @@ func leer(archivo *os.File, direccion string, w *sync.WaitGroup) {
 			if err == io.EOF {
 				break
 			}
-			log.Println(err)
+			m.Lock()
+			canalError <- true
+			fmt.Printf("Ocurrio un error de acceso con el archivo %s , Introdusca cualquier valor para continuar\n", direccion)
+			fmt.Scanln()
+			m.Unlock()
 			return
+		}
+
+		select {
+		case <-canalError:
+			m.Lock()
+
+		default:
+			break
 		}
 
 	}
