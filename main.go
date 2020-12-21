@@ -39,13 +39,13 @@ func main() {
 
 		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen, i, &mOfOpen)
 
-		wOfMethod.Add(1)
-
 		archivoOrigen := <-canalArchivo
 		mOfOpen.Unlock()
 		wOfOpen.Wait()
 
 		direccion := filepath.Join("origen", infoArchivo.Name())
+
+		wOfMethod.Add(1)
 
 		go leer(archivoOrigen, direccion, &wOfMethod, &mOfOpen, canalError)
 
