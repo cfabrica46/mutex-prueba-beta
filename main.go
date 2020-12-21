@@ -67,6 +67,9 @@ func main() {
 
 func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup, i int) {
 
+	//En la función abir pongo la condicion para que halla un archivo el cual no tenga
+	//El permiso de leer y me arroje un error.
+
 	if i == 0 {
 		defer w.Done()
 
@@ -120,6 +123,10 @@ func leer(archivo *os.File, direccion string, w *sync.WaitGroup, m *sync.Mutex, 
 			}
 			m.Lock()
 			canalError <- true
+
+			//El fin de esta practica es hacer algo similar a lo que sucede cuando
+			//En Windows ocurre un error al mover/copiar datos(se freezea los demas procesos)
+
 			fmt.Printf("Ocurrio un error de acceso con el archivo %s , Introdusca cualquier valor para continuar\n", direccion)
 			fmt.Scanln()
 			m.Unlock()
