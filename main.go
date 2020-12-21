@@ -16,7 +16,6 @@ func main() {
 	log.SetFlags(log.Llongfile)
 
 	var wOfMethod, wOfOpen sync.WaitGroup
-	var m sync.Mutex
 
 	fmt.Println("inicio")
 
@@ -28,23 +27,30 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for i, infoArchivo := range origen {
+	canalArchivo := make(chan *os.File, len(origen))
 
-		contenido := make(chan byte)
-
-		fin := make(chan bool)
+	for _, infoArchivo := range origen {
 
 		direccion := filepath.Join("origen", infoArchivo.Name())
 
 		fmt.Println("abro archivo: ", direccion)
 
-		archivoOrigen := abrir("origen", infoArchivo.Name(), os.O_RDONLY)
+		wOfOpen.Add(1)
 
-		wOfMethod.Add(2)
+		go abrir("origen", infoArchivo.Name(), os.O_RDONLY, canalArchivo, &wOfOpen)
 
-		go leer(archivoOrigen, direccion, contenido, fin, &wOfMethod, &m)
+	}
 
-		go escribir(contenido, fin, i, infoArchivo.Name(), &wOfMethod, &m)
+	wOfOpen.Wait()
+
+	for _, infoArchivo := range origen {
+
+		wOfMethod.Add(1)
+		archivoOrigen := <-canalArchivo
+
+		direccion := filepath.Join("origen", infoArchivo.Name())
+
+		go leer(archivoOrigen, direccion, &wOfMethod)
 
 	}
 
@@ -54,90 +60,46 @@ func main() {
 	fmt.Println("fin")
 }
 
-func abrir(carpeta string, nameFile string, flag int) (archivo *os.File) {
+func abrir(carpeta string, nameFile string, flag int, canalArchivo chan<- *os.File, w *sync.WaitGroup) {
+
+	defer w.Done()
 
 	direccion := filepath.Join(carpeta, nameFile)
 
+	fmt.Println("abro archivo: ", direccion)
 	archivo, err := os.OpenFile(direccion, flag, 0)
 
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	canalArchivo <- archivo
 
-	return
 }
 
-func leer(archivo *os.File, direccion string, contenido chan<- byte, fin chan<- bool, w *sync.WaitGroup, m *sync.Mutex) {
+func leer(archivo *os.File, direccion string, w *sync.WaitGroup) {
 
 	defer w.Done()
 
-	origen, err := os.Open(direccion)
+	defer archivo.Close()
 
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	defer origen.Close()
+	defer fmt.Printf("Cierro archivo: %s\n", direccion)
 
 	buf := make([]byte, 1)
 
 	for {
-
-		_, err := origen.Read(buf)
+		_, err := archivo.Read(buf)
 
 		if err != nil {
 			if err == io.EOF {
-
-				fin <- true
 				break
 			}
 			log.Println(err)
-			contenido <- buf[0]
 			return
 		}
 
-		contenido <- buf[0]
-	}
-
-}
-
-func escribir(contenido <-chan byte, fin <-chan bool, i int, name string, w *sync.WaitGroup, m *sync.Mutex) {
-
-	defer w.Done()
-
-	var ok bool
-
-	direccion := filepath.Join("destino", name)
-
-	destino, err := os.OpenFile(direccion, os.O_RDWR|os.O_CREATE, 0)
-
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	defer destino.Close()
-
-	for ok == false {
-		select {
-		case <-fin:
-
-			ok = true
-			break
-		default:
-			cont := <-contenido
-
-			b := []byte{cont}
-			_, err = destino.Write(b)
-
-			if err != nil {
-				log.Println(err)
-				return
-			}
-		}
 	}
 
 	return
+
 }
